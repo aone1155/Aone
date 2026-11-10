@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function admin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+    function active() { return resource.data.isActive == true; }
+
+    match /users/{uid} {
+      allow read: if owner(uid) || admin();
+      allow create: if owner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'customer'
+        && request.resource.data.status == 'active'
+        && request.resource.data.keys().hasOnly([
+          'uid','email','name','firstName','lastName','phone','role','status',
+          'profileComplete','emailVerified','createdAt','updatedAt',
+          'termsAccepted','termsVersion','termsAcceptedAt','privacyAccepted'
+        ])
+        && request.resource.data.termsAccepted == true
+        && request.resource.data.privacyAccepted == true;
+      allow update: if admin() || (owner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name','firstName','lastName','phone','email','profileComplete',
+          'updatedAt','emailVerified','address','addresses','photoURL'
+        ])
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.uid == resource.data.uid);
+      allow delete: if admin();
+    }
+
+    match /products/{id} {
+      allow read: if active() || admin();
+      allow create, update, delete: if admin();
+    }
+    match /categories/{id} {
+      allow read: if active() || admin();
+      allow create, update, delete: if admin();
+    }
+    match /subcategories/{id} {
+      allow read: if active() || admin();
+      allow create, update, delete: if admin();
+    }
+    match /banners/{id} {
+      allow read: if active() || admin();
+      allow create, update, delete: if admin();
+    }
+    match /announcements/{id} {
+      allow read: if active() || admin();
+      allow create, update, delete: if admin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || admin());
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.keys().hasOnly([
+          'id','date','customerId','userId','items','subtotal','shipping','tax',
+          'discount','total','status','paymentMethod','paymentStatus','shippingAddress',
+          'customerName','customerEmail','customerPhone','name','email','phone',
+          'address','area','city','state','pincode','delivery','createdAt','updatedAt',
+          'orderNumber','notes'
+        ])
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.items.size() <= 50;
+      allow update, delete: if admin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if resource.data.status == 'approved'
+        || (signedIn() && resource.data.userId == request.auth.uid)
+        || admin();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5;
+      allow update, delete: if admin();
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,54 @@
+SWEET & SOUR — SECURITY AND DEPLOYMENT NOTES
+================================================
+
+What changed
+------------
+- Firestore rules now prevent customers from assigning themselves the admin role.
+- Customer profile updates are restricted to a safe allow-list of profile fields.
+- Customers cannot edit/delete reviews or approve their own reviews.
+- Order creation is restricted to the signed-in customer and basic order shape/total validation.
+- Storage uploads now use Firebase Storage instead of a public ImgBB API key.
+- Storage rules restrict product/banner uploads to active admins and validate image type/size.
+- Signup requires explicit Terms + Privacy acknowledgement. Consent version and timestamp are stored.
+- Google signup requires the same consent checkbox.
+- Login also requires acknowledgement before email or Google sign-in.
+- Added Terms and Privacy template pages, SVG brand logo and product image fallback.
+- Added responsive/accessibility styling polish.
+
+IMPORTANT: deploy these rules
+-----------------------------
+From the project folder, with Firebase CLI installed and the correct Firebase project selected:
+
+  firebase login
+  firebase use sweet-and-sour-aa364
+  firebase deploy --only firestore:rules,firestore:indexes,storage
+
+Verify the selected project before deployment. The rules in this ZIP do not become active until deployed.
+
+Admin bootstrap
+---------------
+The first admin must be promoted manually by a trusted project owner in Firebase Console:
+Firestore Database > users > [that admin's Firebase Auth UID] > set:
+  role: "admin"
+  status: "active"
+
+Never expose admin credentials or let customers edit role/status. The website does not provide a public admin promotion workflow.
+
+Before production launch
+------------------------
+1. Enable Firebase Authentication email/password and Google providers only if you intend to offer them.
+2. Add your real production domain under Firebase Authentication > Settings > Authorized domains.
+3. Configure Firebase App Check (reCAPTCHA Enterprise or an appropriate supported provider) for Firestore and Storage.
+4. Enable email verification and consider MFA for all admin accounts.
+5. Review Firestore indexes and run the Firebase Emulator Suite security-rules tests.
+6. Set real business contact details and review Terms/Privacy with a qualified professional for applicable Indian laws.
+7. Check Firebase Storage billing/quotas and set budget alerts.
+8. Test checkout, order history, admin moderation, image upload and every mobile navigation path on the live domain.
+
+Architecture limitation / do not skip
+-------------------------------------
+This is a static client-side website. Firestore/Storage rules are the security boundary for database and file access. A browser client cannot keep secrets. The previous ImgBB key was exposed in the public code; image uploads have been moved to Firebase Storage, so that key is no longer used. Revoke/rotate the old ImgBB key in its provider dashboard.
+
+Order amounts are currently calculated in the browser. Rules validate ownership and basic data shape, but cannot prove that a submitted price matches the current catalog price. Before accepting online payments or treating totals as authoritative, move order creation and price/tax/shipping calculation to a trusted Firebase Cloud Function (or another authenticated backend), and have that backend read current product prices. Do not rely on client-calculated totals for payment settlement.
+
+The Terms and Privacy pages are starter templates, not legal advice. Replace their content with your actual business practices, contact details, vendors, retention periods and refund/delivery policy before launch.
